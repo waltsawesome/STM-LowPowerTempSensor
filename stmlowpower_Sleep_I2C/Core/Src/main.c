@@ -21,7 +21,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "string.h"
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,7 +48,10 @@ UART_HandleTypeDef hlpuart1;
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
-
+uint8_t  tempH; //Last 8 bits of temperature data
+uint8_t  tempL; //First 8 bits of temperature data
+uint16_t fullTemp; // Fill temperature dats
+uint8_t config = 0x01; // Address for CTRL register on temperature sensor
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -79,6 +83,9 @@ void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){
 	char *str = "WAKEUP FROM RTC\n\n";
 	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
 	HAL_PWR_DisableSleepOnExit();
+}
+void UART_TRANSMIT(char *str){
+	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
 }
 /* USER CODE END 0 */
 
@@ -119,9 +126,9 @@ int main(void)
  	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
  	  HAL_Delay (200);
    }
- 	char *str = "BEGIN MAIN LOOP\n\n";
- 	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
-
+ 	//char *str = "BEGIN MAIN LOOP\n\n";
+ 	//HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
+ 	UART_TRANSMIT("BEGIN MAIN LOOP\n\n");
    /* enable the RTC Wakeup */
      /*  RTC Wake-up Interrupt Generation:
        Wake-up Time Base = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI))
@@ -145,34 +152,50 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  static uint32_t i = 0;
-	 	  static uint32_t secondsPassed = 0;
-	 	  secondsPassed +=5;
-	 	  char timeMessage[50] = {'\0'};
-	 	  sprintf(timeMessage, "\r\nTime Passed: %lu Seconds\r\n", secondsPassed);
-	 	  HAL_UART_Transmit(&hlpuart1,(uint8_t *) timeMessage, strlen(timeMessage), HAL_MAX_DELAY);
-	 	  /* Generate temp data */
-	 	  temperatureData[i] = (i % 64) + 50;
-	 	  i++;
-	 	  char *str = "GOING INTO STOP MODE\n\n";
-	 	  HAL_UART_Transmit(&hlpuart1,(uint8_t *) str, strlen(str), HAL_MAX_DELAY);
-	 	  /* Suspend tick before entering stop mode */
-	 	  HAL_SuspendTick();
-	 	  /* Enable sleep on exit */
-	 	  //HAL_PWR_EnableSleepOnExit();
-	 	  HAL_PWR_DisableSleepOnExit();
-	 	  /* Enter STOP mode */
-	 	  HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
-	 	  /* Wake from stop mode */
-	 	  SystemClock_Config();
-	 	  HAL_ResumeTick();
-	 	  /** Deactivate the RTC wakeup  **/
-	 	  //HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
-	 	  for (int j=0; j<6; j++)
-	 	  {
-	 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-	 		  HAL_Delay (200);
-	 	  }
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_4);
+	static uint32_t secondsPassed = 0;
+	secondsPassed +=5;
+	char timeMessage[50] = {'\0'};
+	sprintf(timeMessage, "\r\nTime Passed: %u Seconds\r\n", (unsigned int)secondsPassed);
+	HAL_UART_Transmit(&hlpuart1,(uint8_t *) timeMessage, strlen(timeMessage), HAL_MAX_DELAY);
+	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+	// TEMPERATURE CODE //
+	// Device Address is the manufacturer set slave address shifted left + 1
+	if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,1000) == HAL_OK){ // Check if temp sensor detected
+		UART_TRANSMIT("I2C Device Detected\n\n");
+	 	// Write config to CTRL register in temp sensor
+	 	//HAL_Delay(10);
+	 	// Write it again to make sure
+	 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+	 	//HAL_Delay(10);
+	 	// Read data from both temperature registers
+	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, HAL_MAX_DELAY);
+	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, HAL_MAX_DELAY);
+	 	char str2[80];
+	 	fullTemp =((uint16_t)tempH << 8) | tempL; // concatenate temperatures
+	 	sprintf(str2, "temperature = %d \n", fullTemp/100);
+	 	HAL_UART_Transmit(&hlpuart1, (uint8_t *)str2, strlen (str2), HAL_MAX_DELAY);
+	}
+	char *str = "GOING INTO STOP MODE\n\n";
+	HAL_UART_Transmit(&hlpuart1,(uint8_t *) str, strlen(str), HAL_MAX_DELAY);
+	/* Suspend tick before entering stop mode */
+	HAL_SuspendTick();
+	/* Enable sleep on exit */
+	//HAL_PWR_EnableSleepOnExit();
+	HAL_PWR_DisableSleepOnExit();
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_4);
+	/* Enter STOP mode */
+	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+	/* Wake from stop mode */
+	SystemClock_Config();
+	HAL_ResumeTick();
+	/** Deactivate the RTC wakeup  **/
+	//HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
+	/*for (int j=0; j<6; j++)
+	{
+		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+		HAL_Delay (200);
+	}*/
 
   }
   /* USER CODE END 3 */
@@ -239,7 +262,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00000000;
+  hi2c1.Init.Timing = 0x00000103;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
