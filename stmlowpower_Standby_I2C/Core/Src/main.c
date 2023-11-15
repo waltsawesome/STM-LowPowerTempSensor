@@ -59,8 +59,8 @@ FATFS       FatFs;         //Fatfs handle
 FIL         fil;           //File handle
 FRESULT     fres;          //Result after operations
 char        buf[100];      // for reading sd card data
-FATFS *pfs;
-DWORD fre_clust;
+	FATFS *pfs;
+	DWORD fre_clust;
 uint32_t totalSpace, freeSpace;
 /* USER CODE END PV */
 
@@ -72,16 +72,19 @@ static void MX_LPUART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 /* USER CODE BEGIN PFP */
+void UART_TRANSMIT(char *str){
+	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 uint8_t Rx_data[4];  //  creating a buffer of 10 bytes
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+/*void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
   HAL_UART_Receive_IT(&hlpuart1, Rx_data, 1);
-}
+}*/
 /* USER CODE END 0 */
 
 /**
@@ -119,11 +122,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   /* Blink the LED */
   //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
-  	for (int i=0; i<5; i++)
-  	{
-  		HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-  		HAL_Delay(500);
-  	}
+  for (int i=0; i<20; i++)
+   {
+ 	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+ 	  HAL_Delay (200);
+   }
     fres = f_mount(&FatFs, "", 1);    //1=mount now
   	if (fres != FR_OK)
   	{
@@ -133,6 +136,33 @@ int main(void)
   	}else{
   		char *str = "SD Card Mounted Successfully!!!\r\n";
   		HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
+  		// SD CARD CODE //
+  		f_getfree("", &fre_clust, &pfs);
+  		totalSpace = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
+  		freeSpace = (uint32_t)(fre_clust * pfs->csize * 0.5);
+  		char str2[80];
+  		sprintf(str2,"TotalSpace : %lu bytes, FreeSpace = %lu bytes\n", totalSpace, freeSpace);
+  		HAL_UART_Transmit(&hlpuart1, (uint8_t *)str2, strlen (str2), HAL_MAX_DELAY);
+  		// WRITE DATA //
+  		fres = f_open(&fil, "tData.txt", FA_WRITE | FA_READ | FA_CREATE_ALWAYS);
+  		if(fres == FR_OK)
+  		{
+  			//write the data
+  			char str3[4];
+  			sprintf(str3,"%u\n", (unsigned int)fullTemp);
+  			f_puts(str3, &fil);
+  			//close the file
+  			f_close(&fil);
+  			// unmount drive
+  		    f_mount(NULL, "", 0);
+  		  	char *str = "File written and closed.\n\n";
+  		  	HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
+  		  	//Check if drive can remain mounted in standby mode
+  		}else{
+  			char str[80];
+  			sprintf(str,"File creation/open Error : (%i)\r\n", fres);
+  			HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
+  		}
   	}
   	if (__HAL_PWR_GET_FLAG(PWR_FLAG_SB) != RESET) //
   	{
@@ -150,50 +180,21 @@ int main(void)
 
   		// TEMPERATURE CODE //
   	  	// Device Address is the manufacturer set slave address shifted left + 1
-  	  	if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,100) == HAL_OK){ // Check if temp sensor detected
-  	  		char *str = "I2C Device Detected\n\n";
-  	  		HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
-  	  		// Write config to CTRL register in temp sensor
-  	  		HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
-  	  		//HAL_Delay(10);
-  	  		// Write it again to make sure
-  	  		HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
-  	  		//HAL_Delay(10);
-  	  		// Read data from both temperature registers
-  	  		HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, HAL_MAX_DELAY);
-  	  		HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, HAL_MAX_DELAY);
-  	  		char str2[80];
-  	  		fullTemp =((uint16_t)tempH << 8) | tempL; // concatenate temperatures
-  	  		sprintf(str2, "temperature = %d \n", fullTemp/100);
-  	  		HAL_UART_Transmit(&hlpuart1, (uint8_t *)str2, strlen (str2), HAL_MAX_DELAY);
-  	  	}
-  	  	// SD CARD CODE //
-  	    f_getfree("", &fre_clust, &pfs);
-  	    totalSpace = (uint32_t)((pfs->n_fatent - 2) * pfs->csize * 0.5);
-  	    freeSpace = (uint32_t)(fre_clust * pfs->csize * 0.5);
-  	    char str[80];
-  	    sprintf(str,"TotalSpace : %lu bytes, FreeSpace = %lu bytes\n", totalSpace, freeSpace);
-  	    HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
-  	    // WRITE DATA //
-  	    fres = f_open(&fil, "tData.txt", FA_WRITE | FA_READ | FA_CREATE_ALWAYS);
-  	    if(fres == FR_OK)
-  	    {
-  	    	//write the data
-  	    	char str[2];
-  	    	sprintf(str,"%d\n", fullTemp);
-  	        f_puts(str, &fil);
-  	        //close the file
-  	        f_close(&fil);
-  	        // unmount drive
-  	        f_mount(NULL, "", 0);
-  	        char *str = "File written and closed.\n\n";
-  	        HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
-  	        //Check if drive can remain mounted in standby mode
-  	    }else{
-  	    	char *str[80];
-  	    	sprintf(str,"File creation/open Error : (%i)\r\n", fres);
-  	    	HAL_UART_Transmit(&hlpuart1, (uint8_t *)str, strlen (str), HAL_MAX_DELAY);
-  	    }
+  		if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,1000) == HAL_OK){ // Check if temp sensor detected
+  			UART_TRANSMIT("I2C Device Detected\n\n");
+  		 	// Write config to CTRL register in temp sensor
+  		 	//HAL_Delay(10);
+  		 	// Write it again to make sure
+  		 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+  		 	HAL_Delay(10);
+  		 	// Read data from both temperature registers
+  		 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, HAL_MAX_DELAY);
+  		 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, HAL_MAX_DELAY);
+  		 	char str2[80];
+  		 	fullTemp =((uint16_t)tempH << 8) | tempL; // concatenate temperatures
+  		 	sprintf(str2, "temperature = %d \n", fullTemp/100);
+  		 	HAL_UART_Transmit(&hlpuart1, (uint8_t *)str2, strlen (str2), HAL_MAX_DELAY);
+  		}
   	}
   	/** Now enter the standby mode **/
   	/* Clear the WU FLAG */
@@ -266,7 +267,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
-  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_4;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -278,9 +279,9 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV16;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
@@ -462,12 +463,22 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA1 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  /*Configure GPIO pin : PA4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB3 */

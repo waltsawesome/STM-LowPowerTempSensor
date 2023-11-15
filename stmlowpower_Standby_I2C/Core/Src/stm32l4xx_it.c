@@ -51,14 +51,6 @@ extern uint16_t Timer1, Timer2;
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void SDTimer_Handler(void)
-{
-  if(xTimer1 > 0)
-    xTimer1--;
-
-  if(xTimer2 > 0)
-    xTimer2--;
-}
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
