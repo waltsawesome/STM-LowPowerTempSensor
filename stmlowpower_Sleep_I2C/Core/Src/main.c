@@ -54,10 +54,13 @@ UART_HandleTypeDef hlpuart1;
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
-uint8_t  tempH; //Last 8 bits of temperature data
-uint8_t  tempL; //First 8 bits of temperature data
-uint16_t fullTemp; // Fill temperature dats
+uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
+uint8_t storeCounter=3; //store intermediate values in backup reg for more efficiency
+uint16_t fullTemp; // Full temperature data
+uint64_t writeVal; // Value to write to flash storage
+uint32_t bkWrite; // Value to write to backup register
 uint8_t config = 0x01; // Address for CTRL register on temperature sensor
+RTC_TimeTypeDef gTime;
 //FLASH MEMORY STUFF
 uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
 uint32_t Address = 0, PAGEError = 0;
@@ -239,7 +242,10 @@ int main(void)
 	  }
   }
   Address = FLASH_USER_START_ADDR;
+  //Write current Address up backup register
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
   myprintf("Successful Erase! Ready to write...\n");
+  HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, '*'); //Write to RTC backup register
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -249,17 +255,26 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if (storeCounter >= 3){
+		storeCounter=0;
+	}else{storeCounter++;}
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
+	/* Get the RTC current Time */
+	HAL_RTC_GetTime(&hrtc, &gTime, RTC_FORMAT_BIN);
+	// Get current Address to write to //
+	Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
+
 	secondsPassed +=5;
 	// Send time over serial for debugging
-	myprintf("\nTime Passed: %u Seconds\nLast temp: %u\n", (unsigned int)secondsPassed, (unsigned int)5);
+	myprintf("Time Passed: %u Seconds\nLast temp: %u\n", (unsigned int)secondsPassed, (unsigned int)5);
 	// TEMPERATURE CODE //
-	fullTemp=0;
 	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+	writeVal = 0;
 	// Device Address is the manufacturer set slave address shifted left + 1
 	if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,1000) == HAL_OK){ // Check if temp sensor detected
 		myprintf("I2C Device Detected\n\n");
+
 	 	// Write config to CTRL register in temp sensor
 	 	//HAL_Delay(10);
 	 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
@@ -268,28 +283,37 @@ int main(void)
 	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, HAL_MAX_DELAY);
 	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, HAL_MAX_DELAY);
 
-	 	//Print data
-	 	fullTemp =((uint16_t)tempH << 8) | tempL; // concatenate temperatures
+	 	//Concatenate and Print temperature data
+	 	fullTemp =((uint16_t)tempH << 8) | tempL;
 	 	myprintf("temperature = %d \n", fullTemp/100);
+	 	bkWrite |= ((uint32_t)((uint8_t)(fullTemp >> 4)) << storeCounter*8);
+	 	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
 	}
-	if (Address < FLASH_USER_END_ADDR)
-	    {
-		if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, (uint64_t)fullTemp) == HAL_OK)
+	if (storeCounter!=3){
+		writeVal = (uint64_t)HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2);
+	}else{
+		if (Address < FLASH_USER_END_ADDR)
 		{
-			Address = Address + 8;
-			//myprintf("Write success\n");
-		}
-		else
-		{
-			myprintf("WRITING ERROR ERROR ERROR\n\n");
+			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, writeVal) == HAL_OK)
+			{
+				myprintf("%08" PRIx32 "\n",bkWrite);
+				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2,0x00000000);
+				Address = Address + 8;
+			}
+			else
+			{
+				myprintf("WRITING ERROR ERROR ERROR\n\n");
+			}
 		}
 	}
+	//Write current Address up backup register
+	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
 
-    data64 = *(__IO uint64_t *)Address;
+/*    data64 = *(__IO uint64_t *)Address - 8;
     if (data64 != (uint64_t)fullTemp)
     {
-    	myprintf("Wrong thing written???\n\n");
-    }
+    	myprintf("%" PRIx64 "read... Wrong thing written???\n\n", data64);
+    } */
 	myprintf("GOING INTO STOP MODE\n\n");
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
@@ -330,13 +354,18 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
+  /** Configure LSE Drive Capability
+  */
+  HAL_PWR_EnableBkUpAccess();
+  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
+
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -452,6 +481,9 @@ static void MX_RTC_Init(void)
 
   /* USER CODE END RTC_Init 0 */
 
+  RTC_TimeTypeDef sTime = {0};
+  RTC_DateTypeDef sDate = {0};
+
   /* USER CODE BEGIN RTC_Init 1 */
 
   /* USER CODE END RTC_Init 1 */
@@ -470,6 +502,35 @@ static void MX_RTC_Init(void)
   {
     Error_Handler();
   }
+
+  /* USER CODE BEGIN Check_RTC_BKUP */
+  if(HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR0) == '*') {
+      //Time is OK. Set Alarms later.
+      myprintf("RTC backup available\n");
+      return;
+  }
+  /* USER CODE END Check_RTC_BKUP */
+
+  /** Initialize RTC and set the Time and Date
+  */
+  sTime.Hours = 0x0;
+  sTime.Minutes = 0x0;
+  sTime.Seconds = 0x0;
+  sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
+  sTime.StoreOperation = RTC_STOREOPERATION_SET;
+  if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sDate.WeekDay = RTC_WEEKDAY_MONDAY;
+  sDate.Month = RTC_MONTH_JANUARY;
+  sDate.Date = 0x1;
+  sDate.Year = 0x0;
+
+  if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN RTC_Init 2 */
 
   /* USER CODE END RTC_Init 2 */
@@ -483,7 +544,6 @@ static void MX_RTC_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 /* USER CODE BEGIN MX_GPIO_Init_1 */
 /* USER CODE END MX_GPIO_Init_1 */
 
@@ -491,55 +551,6 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
-
-  /*Configure GPIO pins : PC14 PC15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_14|GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PA1 PA8 PA9 PA10
-                           PA11 PA12 PA13 PA14
-                           PA15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_1|GPIO_PIN_8|GPIO_PIN_9|GPIO_PIN_10
-                          |GPIO_PIN_11|GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14
-                          |GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : SD_CS_Pin */
-  GPIO_InitStruct.Pin = SD_CS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SD_CS_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB0 PB1 PB4 PB5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_4|GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PH3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
