@@ -36,7 +36,7 @@
 /* USER CODE BEGIN PD */
 #define FLASH_USER_START_ADDR   ADDR_FLASH_PAGE_16   /* Start @ of user Flash area */
 #define FLASH_USER_END_ADDR     ADDR_FLASH_PAGE_127 + FLASH_PAGE_SIZE - 1   /* End @ of user Flash area */
-
+#define FLASH_USER_ADDR_ADDR    ADDR_FLASH_PAGE_127
 #define DATA_64                 ((uint64_t)0x1234567812345678)
 #define DATA_32                 ((uint32_t)0x12345678)
 /* USER CODE END PD */
@@ -58,12 +58,13 @@ uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
 uint8_t storeCounter=3; //store intermediate values in backup reg for more efficiency
 uint16_t fullTemp; // Full temperature data
 uint64_t writeVal; // Value to write to flash storage
-uint32_t bkWrite; // Value to write to backup register
+uint32_t bkWrite, bkWriteTime; // Value to write to backup register
 uint8_t config = 0x01; // Address for CTRL register on temperature sensor
 RTC_TimeTypeDef gTime;
 //FLASH MEMORY STUFF
 uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
 uint32_t Address = 0, PAGEError = 0;
+uint32_t Rx_Data[2] = {0xFFFF, 0xFFFF};
 __IO uint32_t data32 = 0, MemoryProgramStatus = 0;
 __IO uint64_t data64 = 0;
 static FLASH_EraseInitTypeDef EraseInitStruct;
@@ -83,7 +84,7 @@ void UART_TRANSMIT(char *str);
 /* USER CODE BEGIN 0 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if(GPIO_Pin == GPIO_PIN_14)
+  if(GPIO_Pin == GPIO_PIN_9)
   {
 	  SystemClock_Config ();
 	  HAL_ResumeTick();
@@ -107,7 +108,7 @@ void myprintf(const char *fmt, ...) {
   va_end(args);
 
   int len = strlen(buffer);
-  HAL_UART_Transmit(&hlpuart1, (uint8_t*)buffer, len, -1);
+  HAL_UART_Transmit(&hlpuart1, (uint8_t*)buffer, len, 10);
 }
 static uint32_t GetPage(uint32_t Addr)
 {
@@ -196,60 +197,69 @@ int main(void)
        To configure the wake up timer to 5s the WakeUpCounter is set to 0x2710:
        RTC_WAKEUPCLOCK_RTCCLK_DIV = RTCCLK_Div16 = 16
        Wake-up Time Base = 16 /(32KHz) = 0.0005 seconds
-       ==> WakeUpCounter = ~5s/0.0005s = 20000 = 0x2710
+       ==> WakeUpCounter = ~5s/0.0005s = 10000 = 0x2710
      */
   if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0x2710, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
   {
 	  Error_Handler();
   }
-  //Now Erase the Flash memory we will use//
-  /* Unlock the Flash to enable the flash control register access *************/
-  HAL_FLASH_Unlock();
-
-  /* Erase the user Flash area
-        (area defined by FLASH_USER_START_ADDR and FLASH_USER_END_ADDR) ***********/
-
-  /* Clear OPTVERR bit set on virgin samples */
-  __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
-  /* Get the 1st page to erase */
-  FirstPage = GetPage(FLASH_USER_START_ADDR);
-  /* Get the number of pages to erase from 1st page */
-  NbOfPages = GetPage(FLASH_USER_END_ADDR) - FirstPage + 1;
-  /* Get the bank */
-  BankNumber = GetBank(FLASH_USER_START_ADDR);
-  /* Fill EraseInit structure*/
-  EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
-  EraseInitStruct.Banks       = BankNumber;
-  EraseInitStruct.Page        = FirstPage;
-  EraseInitStruct.NbPages     = NbOfPages;
-  myprintf("Starting Program\n\r");
-  /* Note: If an erase operation in Flash memory also concerns data in the data or instruction cache,
-         you have to make sure that these data are rewritten before they are accessed during code
-         execution. If this cannot be done safely, it is recommended to flush the caches by setting the
-         DCRST and ICRST bits in the FLASH_CR register. */
-  if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK)
-  {
-  /*
-  Error occurred while page erase.
-  User can add here some code to deal with this error.
-  PAGEError will contain the faulty page and then to know the code error on this page,
-  user can call function 'HAL_FLASH_GetError()'
-  */
+  //Scan Flash for free page, assume if start of page is empty, the page is empty
+  // 2048 should be page size in bytes, 1 address = 1 byte
+  Address = FLASH_USER_START_ADDR;
+  while (Address < FLASH_USER_ADDR_ADDR && Rx_Data[0] != 0xFF){
+	  //Rear First word of page
+	  Flash_Read_Data (Address, Rx_Data, 1);
+	  Address += FLASH_PAGE_SIZE;
+  }if (Address >= FLASH_USER_ADDR_ADDR){
+	//Now Erase the Flash memory we will use//
+	/* Unlock the Flash to enable the flash control register access *************/
+	HAL_FLASH_Unlock();
+	/* Erase the user Flash area
+			(area defined by FLASH_USER_START_ADDR and FLASH_USER_END_ADDR) ***********/
+	  /* Clear OPTVERR bit set on virgin samples */
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
+	/* Get the 1st page to erase */
+	FirstPage = GetPage(FLASH_USER_START_ADDR);
+	/* Get the number of pages to erase from 1st page */
+	NbOfPages = GetPage(FLASH_USER_START_ADDR+FLASH_PAGE_SIZE) - FirstPage + 1;
+	/* Get the bank */
+	BankNumber = GetBank(FLASH_USER_START_ADDR);
+	/* Fill EraseInit structure*/
+	EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
+	EraseInitStruct.Banks       = BankNumber;
+	EraseInitStruct.Page        = FirstPage;
+	EraseInitStruct.NbPages     = NbOfPages;
+	myprintf("Starting Program\n\r");
+	/* Note: If an erase operation in Flash memory also concerns data in the data or instruction cache,
+			 you have to make sure that these data are rewritten before they are accessed during code
+			 execution. If this cannot be done safely, it is recommended to flush the caches by setting the
+			 DCRST and ICRST bits in the FLASH_CR register. */
+	if (HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError) != HAL_OK)
+	{
+	  /*
+	  Error occurred while page erase.
+	  User can add here some code to deal with this error.
+	  PAGEError will contain the faulty page and then to know the code error on this page,
+	  user can call function 'HAL_FLASH_GetError()'
+	  */
 	  while (1)
 	  {
-		  /* Make LED3 blink (100ms on, 2s off) to indicate error in Erase operation */
+			  /* Make LED3 blink (100ms on, 2s off) to indicate error in Erase operation */
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  HAL_Delay(100);
 		  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 		  HAL_Delay(2000);
 		  myprintf("ERROR while erasing\n");
 	  }
+	}
+	Address = FLASH_USER_START_ADDR;
   }
-  Address = FLASH_USER_START_ADDR;
+  //Address = FLASH_USER_START_ADDR;
+  myprintf("Address: %08" PRIx32 "\n",Address);
   //Write current Address up backup register
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
-  myprintf("Successful Erase! Ready to write...\n\r");
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, '*'); //Write to RTC backup register
+  HAL_FLASH_Lock();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -271,7 +281,7 @@ int main(void)
 
 	secondsPassed +=5;
 	// Send time over serial for debugging
-	myprintf("Time Passed: %u Seconds\n\rLast temp: %u\n\n\r", (unsigned int)secondsPassed, (unsigned int)5);
+	myprintf("Time Passed: %u Seconds\n\r", (unsigned int)secondsPassed);
 	// TEMPERATURE CODE //
 	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, 10);
 	writeVal = 0;
@@ -280,7 +290,6 @@ int main(void)
 		myprintf("I2C Device Detected\n\n\r");
 
 	 	//Write config to CTRL register in temp sensor
-	 	HAL_Delay(10);
 	 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, 10);
 
 	 	//Read data from both temperature registers
@@ -290,17 +299,37 @@ int main(void)
 	 	//Concatenate and Print temperature data
 	 	fullTemp =((uint16_t)tempH << 8) | tempL;
 	 	myprintf("temperature = %d \n\r", fullTemp/100);
-	 	bkWrite |= ((uint32_t)((uint8_t)(fullTemp >> 4)) << storeCounter*8);
-	 	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
 	}
+ 	bkWrite = ((uint32_t)(uint8_t)((fullTemp >> 5) & 0xFF) << storeCounter*8);
+ 	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
+ 	bkWriteTime = (uint32_t)(0x05<<storeCounter*8);
+ 	bkWriteTime = (bkWriteTime | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3));
 	if (storeCounter!=3){
-		writeVal = (uint64_t)HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2);
+		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
+		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, bkWriteTime);
 	}else{
-		if (Address < FLASH_USER_END_ADDR)
+		writeVal = ((uint64_t)HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2)<<32) | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3);
+		HAL_FLASH_Unlock();
+		if (Address < FLASH_USER_ADDR_ADDR)
 		{
+			if (Address % FLASH_PAGE_SIZE == 0){ // ERASE NEXT PAGE
+				__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
+				/* Get the 1st page to erase */
+				FirstPage = GetPage(Address);
+				/* Get the number of pages to erase from 1st page */
+				NbOfPages = 1;
+				/* Get the bank */
+				BankNumber = GetBank(FLASH_USER_START_ADDR);
+				/* Fill EraseInit structure*/
+				EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
+				EraseInitStruct.Banks       = BankNumber;
+				EraseInitStruct.Page        = FirstPage;
+				EraseInitStruct.NbPages     = NbOfPages;
+				HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
+			}
 			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, writeVal) == HAL_OK)
 			{
-				myprintf("%08" PRIx32 "\n",bkWrite);
+				myprintf("%08" PRIx32 "\n",bkWriteTime);
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2,0x00000000);
 				Address = Address + 8;
 			}
@@ -308,7 +337,23 @@ int main(void)
 			{
 				myprintf("WRITING ERROR ERROR ERROR\n\n");
 			}
+		}else{
+			Address = FLASH_USER_START_ADDR;
+			__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
+			/* Get the 1st page to erase */
+			FirstPage = GetPage(Address);
+			/* Get the number of pages to erase from 1st page */
+			NbOfPages = 1;
+			/* Get the bank */
+			BankNumber = GetBank(FLASH_USER_START_ADDR);
+			/* Fill EraseInit structure*/
+			EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
+			EraseInitStruct.Banks       = BankNumber;
+			EraseInitStruct.Page        = FirstPage;
+			EraseInitStruct.NbPages     = NbOfPages;
+			HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
 		}
+		HAL_FLASH_Lock();
 	}
 	//Write current Address up backup register
 	HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
@@ -562,16 +607,13 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PB3 */
+  /*Configure GPIO pin : PH3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
