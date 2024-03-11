@@ -308,6 +308,8 @@ int main(void)
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, bkWriteTime);
 	}else{
+		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
+		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, bkWriteTime);
 		writeVal = ((uint64_t)HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2)<<32) | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3);
 		HAL_FLASH_Unlock();
 		if (Address < FLASH_USER_ADDR_ADDR)
@@ -331,6 +333,7 @@ int main(void)
 			{
 				myprintf("%08" PRIx32 "\n",bkWriteTime);
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2,0x00000000);
+				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3,0x00000000);
 				Address = Address + 8;
 			}
 			else
