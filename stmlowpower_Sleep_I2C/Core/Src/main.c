@@ -73,8 +73,8 @@ static FLASH_EraseInitTypeDef EraseInitStruct;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_RTC_Init(void);
-static void MX_LPUART1_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_LPUART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 void UART_TRANSMIT(char *str);
 /* USER CODE END PFP */
@@ -88,15 +88,15 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	  SystemClock_Config ();
 	  HAL_ResumeTick();
 	  char *str = "WAKEUP FROM EXTII\n\n";
-	  HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
+	  HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), 100);
 	  HAL_PWR_DisableSleepOnExit();
   }
 }
 void HAL_RTCEx_WakeUpTimerEventCallback(RTC_HandleTypeDef *hrtc){
 	SystemClock_Config ();
 	HAL_ResumeTick();
-	char *str = "WAKEUP FROM RTC\n\n";
-	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), HAL_MAX_DELAY);
+	char *str = "WAKEUP FROM RTC\n\n\r";
+	HAL_UART_Transmit(&hlpuart1, (uint8_t *) str, strlen (str), 100);
 	HAL_PWR_DisableSleepOnExit();
 }
 void myprintf(const char *fmt, ...) {
@@ -174,16 +174,20 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_RTC_Init();
-  MX_LPUART1_UART_Init();
   MX_I2C1_Init();
+  MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  // Optional Flasher
+  /*
   HAL_Delay(1000);
   for (int i=0; i<11; i++)
   {
 	  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	  HAL_Delay(200);
   }
-  myprintf("BEGIN MAIN LOOP\n\n");
+  HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+  */
+  myprintf("BEGIN MAIN LOOP\n\n\r");
    /* enable the RTC Wakeup */
      /*  RTC Wake-up Interrupt Generation:
        Wake-up Time Base = (RTC_WAKEUPCLOCK_RTCCLK_DIV /(LSI))
@@ -218,7 +222,7 @@ int main(void)
   EraseInitStruct.Banks       = BankNumber;
   EraseInitStruct.Page        = FirstPage;
   EraseInitStruct.NbPages     = NbOfPages;
-  myprintf("Starting Program\n");
+  myprintf("Starting Program\n\r");
   /* Note: If an erase operation in Flash memory also concerns data in the data or instruction cache,
          you have to make sure that these data are rewritten before they are accessed during code
          execution. If this cannot be done safely, it is recommended to flush the caches by setting the
@@ -244,7 +248,7 @@ int main(void)
   Address = FLASH_USER_START_ADDR;
   //Write current Address up backup register
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
-  myprintf("Successful Erase! Ready to write...\n");
+  myprintf("Successful Erase! Ready to write...\n\r");
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, '*'); //Write to RTC backup register
   /* USER CODE END 2 */
 
@@ -267,25 +271,25 @@ int main(void)
 
 	secondsPassed +=5;
 	// Send time over serial for debugging
-	myprintf("Time Passed: %u Seconds\nLast temp: %u\n", (unsigned int)secondsPassed, (unsigned int)5);
+	myprintf("Time Passed: %u Seconds\n\rLast temp: %u\n\n\r", (unsigned int)secondsPassed, (unsigned int)5);
 	// TEMPERATURE CODE //
-	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, 10);
 	writeVal = 0;
 	// Device Address is the manufacturer set slave address shifted left + 1
-	if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,1000) == HAL_OK){ // Check if temp sensor detected
-		myprintf("I2C Device Detected\n\n");
+	if (HAL_I2C_IsDeviceReady(&hi2c1,0x79,1,10) == HAL_OK){ // Check if temp sensor detected
+		myprintf("I2C Device Detected\n\n\r");
 
-	 	// Write config to CTRL register in temp sensor
-	 	//HAL_Delay(10);
-	 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, HAL_MAX_DELAY);
+	 	//Write config to CTRL register in temp sensor
+	 	HAL_Delay(10);
+	 	HAL_I2C_Mem_Write(&hi2c1, 0x78, 0x04, 1, &config, 1, 10);
 
-	 	// Read data from both temperature registers
-	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, HAL_MAX_DELAY);
-	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, HAL_MAX_DELAY);
+	 	//Read data from both temperature registers
+	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, 10);
+	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, 10);
 
 	 	//Concatenate and Print temperature data
 	 	fullTemp =((uint16_t)tempH << 8) | tempL;
-	 	myprintf("temperature = %d \n", fullTemp/100);
+	 	myprintf("temperature = %d \n\r", fullTemp/100);
 	 	bkWrite |= ((uint32_t)((uint8_t)(fullTemp >> 4)) << storeCounter*8);
 	 	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
 	}
@@ -314,17 +318,23 @@ int main(void)
     {
     	myprintf("%" PRIx64 "read... Wrong thing written???\n\n", data64);
     } */
-	myprintf("GOING INTO STOP MODE\n\n");
+	//myprintf("GOING INTO STOP MODE\n\n");
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
 	/* Sleep on Exit? */
 	//HAL_PWR_EnableSleepOnExit();
 	HAL_PWR_DisableSleepOnExit();
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
+	// Disable peripherals before entering stop mode
+	HAL_UART_DeInit(&hlpuart1);
+	HAL_I2C_DeInit(&hi2c1);
 	/* Enter STOP mode */
 	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 	/* Wake from stop mode */
 	SystemClock_Config();
+	// Re-init peripherals after waking from stop mode
+	MX_I2C1_Init();
+	MX_LPUART1_UART_Init();
 	HAL_ResumeTick();
 	/** Deactivate the RTC wakeup, we would do this when connected to PC**/
 	//HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
@@ -377,9 +387,9 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV8;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV8;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
@@ -544,6 +554,7 @@ static void MX_RTC_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
 /* USER CODE BEGIN MX_GPIO_Init_1 */
 /* USER CODE END MX_GPIO_Init_1 */
 
@@ -551,6 +562,16 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PB3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
