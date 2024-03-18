@@ -1,0 +1,10 @@
+flushrecv
+clearscreen 0
+dispstr 'Waiting for microcontroller to send data...'
+; Wait to receive "#" in data transfer message indicating start
+wait #35
+flushrecv
+clearscreen 0
+; Wait to receive '.' in data transfer message indicating completion
+wait #46
+closett
