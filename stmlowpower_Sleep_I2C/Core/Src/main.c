@@ -39,6 +39,7 @@
 #define FLASH_USER_ADDR_ADDR    ADDR_FLASH_PAGE_127
 #define DATA_64                 ((uint64_t)0x1234567812345678)
 #define DATA_32                 ((uint32_t)0x12345678)
+#define DATA_COLLECT_INTERVAL	5
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -61,6 +62,7 @@ uint64_t writeVal; // Value to write to flash storage
 uint32_t bkWrite, bkWriteTime; // Value to write to backup register
 uint8_t config = 0x01; // Address for CTRL register on temperature sensor
 RTC_TimeTypeDef gTime;
+uint32_t dataSamplesStored = 0; // number of temperature data samples taken
 //FLASH MEMORY STUFF
 uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
 uint32_t Address = 0, PAGEError = 0;
@@ -68,6 +70,8 @@ uint32_t Rx_Data[2] = {0xFFFF, 0xFFFF};
 __IO uint32_t data32 = 0, MemoryProgramStatus = 0;
 __IO uint64_t data64 = 0;
 static FLASH_EraseInitTypeDef EraseInitStruct;
+//DATA TRANSFER STUFF
+uint8_t UART_Rx_Data[1] = "w";
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,7 +112,7 @@ void myprintf(const char *fmt, ...) {
   va_end(args);
 
   int len = strlen(buffer);
-  HAL_UART_Transmit(&hlpuart1, (uint8_t*)buffer, len, 10);
+  HAL_UART_Transmit(&hlpuart1, (uint8_t*)buffer, len, 100);
 }
 static uint32_t GetPage(uint32_t Addr)
 {
@@ -143,6 +147,29 @@ void Flash_Read_Data (uint32_t StartPageAddress, uint32_t *RxBuf, uint16_t numbe
 		RxBuf++;
 		if (!(numberofwords--)) break;
 	}
+}
+
+void Transfer_All_Data()
+{
+	uint32_t currentAddress = FLASH_USER_START_ADDR;
+	uint32_t dataTimeInterval;
+	uint32_t dataTimePassed = 0;
+	uint32_t dataTemperatureHex;
+	uint32_t dataTemperature;
+	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", dataSamplesStored * 4);
+	for (uint32_t i = 1; i <= dataSamplesStored * 4; i++)
+	{
+		dataTimeInterval = *(__IO uint32_t *)currentAddress & 0xff;
+		dataTimePassed += dataTimeInterval;
+		dataTemperatureHex = *(__IO uint32_t *)(currentAddress+4) & 0xff;
+		dataTemperature = (dataTemperatureHex * 32) / 100;
+		currentAddress += 1;
+		// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
+		if ((i % 4) == 0)
+			currentAddress += 4;
+		myprintf("Time %d s:\tTemp: %d C\n\r", dataTimePassed, dataTemperature);
+	}
+	myprintf("Data Transfer Completed.\n\r");
 }
 /* USER CODE END 0 */
 
@@ -199,7 +226,7 @@ int main(void)
        Wake-up Time Base = 16 /(32KHz) = 0.0005 seconds
        ==> WakeUpCounter = ~5s/0.0005s = 10000 = 0x2710
      */
-  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0x2710, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, DATA_COLLECT_INTERVAL * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
   {
 	  Error_Handler();
   }
@@ -207,7 +234,7 @@ int main(void)
   // 2048 should be page size in bytes, 1 address = 1 byte
   Address = FLASH_USER_START_ADDR;
   while (Address < FLASH_USER_ADDR_ADDR && Rx_Data[0] != 0xFF){
-	  //Rear First word of page
+	  //Read First word of page
 	  Flash_Read_Data (Address, Rx_Data, 1);
 	  Address += FLASH_PAGE_SIZE;
   }if (Address >= FLASH_USER_ADDR_ADDR){
@@ -278,8 +305,7 @@ int main(void)
 	HAL_RTC_GetTime(&hrtc, &gTime, RTC_FORMAT_BIN);
 	// Get current Address to write to //
 	Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
-
-	secondsPassed +=5;
+	secondsPassed += DATA_COLLECT_INTERVAL;
 	// Send time over serial for debugging
 	myprintf("Time Passed: %u Seconds\n\r", (unsigned int)secondsPassed);
 	// TEMPERATURE CODE //
@@ -331,10 +357,11 @@ int main(void)
 			}
 			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, Address, writeVal) == HAL_OK)
 			{
-				myprintf("%08" PRIx32 "\n",bkWriteTime);
+				//myprintf("%08" PRIx32 "\n\r",bkWriteTime);
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2,0x00000000);
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3,0x00000000);
 				Address = Address + 8;
+			 	dataSamplesStored++;
 			}
 			else
 			{
@@ -367,6 +394,13 @@ int main(void)
     	myprintf("%" PRIx64 "read... Wrong thing written???\n\n", data64);
     } */
 	//myprintf("GOING INTO STOP MODE\n\n");
+	// Check if USB connected (CN2 PIN 2 -> D12)
+	if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_4))
+	{
+		// If USB connected transfer data
+		myprintf("USB Detected\n\r");
+		Transfer_All_Data();
+	}
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
 	/* Sleep on Exit? */
@@ -509,7 +543,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 38400;
+  hlpuart1.Init.BaudRate = 115200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
@@ -611,6 +645,12 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+
+  /*Configure GPIO pin : PB4 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PH3 */
   GPIO_InitStruct.Pin = GPIO_PIN_3;
