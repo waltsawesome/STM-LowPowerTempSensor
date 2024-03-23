@@ -55,7 +55,7 @@ RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
 uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
-uint8_t storeCounter=3, colInt = 2; //store intermediate values in backup reg for more efficiency
+uint8_t storeCounter=3, colInt = 5; //store intermediate values in backup reg for more efficiency
 uint16_t fullTemp; // Full temperature data
 uint64_t writeVal; // Value to write to flash storage
 uint32_t bkWrite, bkWriteTime; // Value to write to backup register
@@ -64,7 +64,7 @@ RTC_TimeTypeDef gTime; // to be used if we want to improve time tracking
 uint32_t dataSamplesStored = 0; // number of temperature data samples taken
 //FLASH MEMORY STUFF
 uint32_t FirstPage = 0, NbOfPages = 0, BankNumber = 0;
-uint32_t Address = 0, mgmtAddr = FLASH_USER_ADDR_ADDR+8, PAGEError = 0;
+uint32_t Address = 0, mgmtAddr = FLASH_USER_ADDR_ADDR, PAGEError = 0;
 uint32_t Rx_Data[2];
 __IO uint32_t data32 = 0, MemoryProgramStatus = 0;
 static FLASH_EraseInitTypeDef EraseInitStruct;
@@ -243,6 +243,8 @@ int main(void)
 		  mgmtAddr-=8;
 		  Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 		  Address = Rx_Data[0];
+	  }else{
+		  Address = Rx_Data[0];
 	  }
 	  if (Address >= FLASH_USER_ADDR_ADDR){
 		//Now Erase the Flash memory we will use//
@@ -305,7 +307,7 @@ int main(void)
 	if (storeCounter >= 3){
 		storeCounter=0;
 	}else{storeCounter++;}
-	storeCounter=3;
+	//storeCounter=3;
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
 	/* Get the RTC current Time */
@@ -369,7 +371,6 @@ int main(void)
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2,0x00000000);
 				HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3,0x00000000);
 				Address = Address + 8;
-				mgmtAddr = mgmtAddr + 8;
 			 	dataSamplesStored++;
 			}else{
 				myprintf("ERROR WRITING DATA\n");
@@ -390,7 +391,8 @@ int main(void)
 				HAL_FLASHEx_Erase(&EraseInitStruct, &PAGEError);
 				mgmtAddr = FLASH_USER_ADDR_ADDR;
 			}
-			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, (uint64_t)Address) == HAL_OK)
+			//if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, (((uint64_t)Address <<32) | (uint32_t)dataSamplesStored) == HAL_OK))
+			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, Address) == HAL_OK)
 			{
 				myprintf("stored: %08" PRIx32 " at: %08" PRIx32 "\n",Address, mgmtAddr);
 				mgmtAddr = mgmtAddr + 8;
@@ -493,9 +495,9 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV4;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV8;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV2;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
