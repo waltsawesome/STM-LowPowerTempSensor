@@ -14,5 +14,5 @@ for /f "tokens=2 delims=()" %%a in ('wmic path win32_pnpentity get caption /form
 )
 :: Run tera term, save log to original directory
 echo Attempting to collect logs from COM port #%port%
-ttermpro /C=%port% /BAUD=115200 /M="%STARTING_DIR%\clear_buffers.ttl"
-ttermpro /C=%port% /BAUD=115200 /L="%STARTING_DIR%/temperature-data.log" /M="%STARTING_DIR%\receive_data.ttl"
+ttermpro /C=%port% /BAUD=1843200 /M="%STARTING_DIR%\clear_buffers.ttl"
+ttermpro /C=%port% /BAUD=1843200 /L="%STARTING_DIR%/temperature-data.log" /M="%STARTING_DIR%\receive_data.ttl"
