@@ -149,26 +149,32 @@ void Flash_Read_Data (uint32_t StartPageAddress, uint32_t *RxBuf, uint16_t numbe
 
 void Transfer_All_Data()
 {
+	uint32_t readSamplesStored = 0;
 	uint32_t currentAddress = FLASH_USER_START_ADDR;
 	uint32_t dataTimeInterval;
 	uint32_t dataTimePassed = 0;
 	uint32_t dataTemperatureHex;
 	uint32_t dataTemperature;
 	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
-	dataSamplesStored = Rx_Data[1];
-	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", dataSamplesStored*4);
-	HAL_Delay(10000);
-	for (uint32_t i = 1; i <= dataSamplesStored * 4; i++)
+	readSamplesStored = Rx_Data[1];
+	readSamplesStored = (readSamplesStored == 0xffffffff) ? 0 : readSamplesStored;
+	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", readSamplesStored * 4);
+	if ((readSamplesStored == 0) || readSamplesStored == 0xffffffff)
+		myprintf("No stored data samples to transfer!\n\r");
+	else
 	{
-		dataTimeInterval = *(__IO uint32_t *)currentAddress & 0xff;
-		dataTimePassed += dataTimeInterval;
-		dataTemperatureHex = *(__IO uint32_t *)(currentAddress+4) & 0xff;
-		dataTemperature = (dataTemperatureHex * 32) / 100;
-		currentAddress += 1;
-		// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
-		if ((i % 4) == 0)
-			currentAddress += 4;
-		myprintf("Time %d s:\tTemp: %d C\n\r", dataTimePassed, dataTemperature);
+		for (uint32_t i = 1; i <= readSamplesStored * 4; i++)
+		{
+			dataTimeInterval = *(__IO uint32_t *)currentAddress & 0xff;
+			dataTimePassed += dataTimeInterval;
+			dataTemperatureHex = *(__IO uint32_t *)(currentAddress+4) & 0xff;
+			dataTemperature = (dataTemperatureHex * 32) / 100;
+			currentAddress += 1;
+			// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
+			if ((i % 4) == 0)
+				currentAddress += 4;
+			myprintf("Time: %d s, Temp: %d C\n\r", dataTimePassed, dataTemperature);
+		}
 	}
 	myprintf("Data Transfer Completed.\n\r");
 }
@@ -180,6 +186,7 @@ void Transfer_All_Data()
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -239,7 +246,7 @@ int main(void)
 	  Address = FLASH_USER_START_ADDR;
 	  while (mgmtAddr < FLASH_USER_END_ADDR && Rx_Data[0] != 0xFFFFFFFF){
 		  Flash_Read_Data (mgmtAddr, Rx_Data, 1);
-		  myprintf("read: %08" PRIx32 " at: %08" PRIx32 "\n",Rx_Data[0], mgmtAddr);
+		  myprintf("read: %08" PRIx32 " at: %08" PRIx32 "\n\r",Rx_Data[0], mgmtAddr);
 		  mgmtAddr += 8;
 	  }
 	  if ((Rx_Data[0] == 0xFFFFFFFF)){
@@ -247,10 +254,12 @@ int main(void)
 		  Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 		  Address = Rx_Data[0];
 		  dataSamplesStored=Rx_Data[1];
-		  myprintf("Address: %08" PRIx32 " Samples: %08" PRIx32 "\n",Rx_Data[0], Rx_Data[1]);
+		  dataSamplesStored = (dataSamplesStored == 0xFFFFFFFF) ? 0 : dataSamplesStored;
+		  myprintf("Address: %08" PRIx32 " Samples: %08" PRIx32 "\n\r",Rx_Data[0], Rx_Data[1]);
 	  }else{
 		  Address = Rx_Data[0];
 		  dataSamplesStored=Rx_Data[1];
+		  dataSamplesStored = (dataSamplesStored == 0xFFFFFFFF) ? 0 : dataSamplesStored;
 	  }
 	  if (Address >= FLASH_USER_ADDR_ADDR){
 		//Now Erase the Flash memory we will use//
@@ -349,7 +358,7 @@ int main(void)
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, bkWriteTime);
 	}else{
-		myprintf("Current Address: %08" PRIx32 "\n",Address);
+		myprintf("Current Address: %08" PRIx32 "\n\r",Address);
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR3, bkWriteTime);
 		writeVal = ((uint64_t)HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2)<<32) | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3);
@@ -357,7 +366,7 @@ int main(void)
 		if (Address < FLASH_USER_ADDR_ADDR)
 		{
 			if (Address % FLASH_PAGE_SIZE == 0){ /*is the current address the start of a page?*/
-				myprintf("Starting new page... Erasing...\n");
+				myprintf("Starting new page... Erasing...\n\r");
 				__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
 				/* Erase the Next Page */
 				FirstPage = GetPage(Address);
@@ -379,7 +388,7 @@ int main(void)
 				Address = Address + 8;
 			 	dataSamplesStored++;
 			}else{
-				myprintf("ERROR WRITING DATA\n");
+				myprintf("ERROR WRITING DATA\n\r");
 				Address = Address + 8;
 			} //Store current Address in memory in case power is lost!
 			if (mgmtAddr >= FLASH_USER_END_ADDR){
@@ -577,7 +586,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 115200;
+  hlpuart1.Init.BaudRate = 1843200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
@@ -684,12 +693,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = GPIO_PIN_4;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PB5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PH3 */
