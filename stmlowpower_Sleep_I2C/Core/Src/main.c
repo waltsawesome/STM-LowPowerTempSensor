@@ -154,7 +154,10 @@ void Transfer_All_Data()
 	uint32_t dataTimePassed = 0;
 	uint32_t dataTemperatureHex;
 	uint32_t dataTemperature;
-	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", dataSamplesStored * 4);
+	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
+	dataSamplesStored = Rx_Data[1];
+	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", dataSamplesStored*4);
+	HAL_Delay(10000);
 	for (uint32_t i = 1; i <= dataSamplesStored * 4; i++)
 	{
 		dataTimeInterval = *(__IO uint32_t *)currentAddress & 0xff;
@@ -231,7 +234,7 @@ int main(void)
   //Scan Flash for free page, assume if start of page is empty, the page is empty
   // 2048 should be page size in bytes, 1 address = 1 byte
   //HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, FLASH_USER_START_ADDR);
-  Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
+  // Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
   if (Address == 0x00000000){
 	  Address = FLASH_USER_START_ADDR;
 	  while (mgmtAddr < FLASH_USER_END_ADDR && Rx_Data[0] != 0xFFFFFFFF){
@@ -243,8 +246,11 @@ int main(void)
 		  mgmtAddr-=8;
 		  Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 		  Address = Rx_Data[0];
+		  dataSamplesStored=Rx_Data[1];
+		  myprintf("Address: %08" PRIx32 " Samples: %08" PRIx32 "\n",Rx_Data[0], Rx_Data[1]);
 	  }else{
 		  Address = Rx_Data[0];
+		  dataSamplesStored=Rx_Data[1];
 	  }
 	  if (Address >= FLASH_USER_ADDR_ADDR){
 		//Now Erase the Flash memory we will use//
@@ -351,7 +357,7 @@ int main(void)
 		if (Address < FLASH_USER_ADDR_ADDR)
 		{
 			if (Address % FLASH_PAGE_SIZE == 0){ /*is the current address the start of a page?*/
-				myprintf("Starting new page... Erasing...");
+				myprintf("Starting new page... Erasing...\n");
 				__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
 				/* Erase the Next Page */
 				FirstPage = GetPage(Address);
@@ -374,6 +380,7 @@ int main(void)
 			 	dataSamplesStored++;
 			}else{
 				myprintf("ERROR WRITING DATA\n");
+				Address = Address + 8;
 			} //Store current Address in memory in case power is lost!
 			if (mgmtAddr >= FLASH_USER_END_ADDR){
 				// Erase mem mgmt page and start again!
@@ -392,12 +399,13 @@ int main(void)
 				mgmtAddr = FLASH_USER_ADDR_ADDR;
 			}
 			//if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, (((uint64_t)Address <<32) | (uint32_t)dataSamplesStored) == HAL_OK))
-			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, Address) == HAL_OK)
+			if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, mgmtAddr, (uint64_t)dataSamplesStored<<32|Address) == HAL_OK)
 			{
 				myprintf("stored: %08" PRIx32 " at: %08" PRIx32 "\n",Address, mgmtAddr);
 				mgmtAddr = mgmtAddr + 8;
 			}else{
 				myprintf("ERROR STORING ADDRESS\n");
+				mgmtAddr = mgmtAddr + 8;
 			}
 		}else{
 			myprintf("Reached end of user address... \n starting from the top!");
