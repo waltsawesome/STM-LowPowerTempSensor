@@ -158,7 +158,7 @@ void Transfer_All_Data()
 	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 	readSamplesStored = Rx_Data[1];
 	readSamplesStored = (readSamplesStored == 0xffffffff) ? 0 : readSamplesStored;
-	myprintf("#Transmitting all Voltage Data (%u Samples):\n\r", readSamplesStored * 4);
+	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", readSamplesStored * 4);
 	if ((readSamplesStored == 0) || readSamplesStored == 0xffffffff)
 		myprintf("No stored data samples to transfer!\n\r");
 	else
