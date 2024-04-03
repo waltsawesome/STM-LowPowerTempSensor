@@ -322,14 +322,6 @@ int main(void)
 	if (storeCounter >= 3){
 		storeCounter=0;
 	}else{storeCounter++;}
-	// check PGOOD
-	if(HAL_GPIO_ReadPin (GPIOB, GPIO_PIN_5)){
-		colInt = 5;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
-	}else{
-		colInt = 30;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
-	}
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
 	/* Get the RTC current Time */
@@ -359,7 +351,7 @@ int main(void)
 	}
  	bkWrite = ((uint32_t)(uint8_t)((fullTemp >> 5) & 0xFF) << storeCounter*8);
  	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
- 	bkWriteTime = (uint32_t)(0x05<<storeCounter*8);
+ 	bkWriteTime = (uint32_t)colInt<<storeCounter*8;
  	bkWriteTime = (bkWriteTime | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3));
 	if (storeCounter!=3){
 		HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR2, bkWrite);
@@ -450,6 +442,14 @@ int main(void)
 		// If USB connected transfer data
 		myprintf("USB Detected\n\r");
 		Transfer_All_Data();
+	}
+	// check PGOOD
+	if(HAL_GPIO_ReadPin (GPIOB, GPIO_PIN_5)){
+		colInt = 5;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
+	}else{
+		colInt = 30;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
 	}
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
@@ -593,7 +593,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 115200;
+  hlpuart1.Init.BaudRate = 1843200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
