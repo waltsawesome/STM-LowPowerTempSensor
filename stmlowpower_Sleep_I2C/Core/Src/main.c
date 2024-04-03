@@ -173,7 +173,7 @@ void Transfer_All_Data()
 			// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
 			if ((i % 4) == 0)
 				currentAddress += 4;
-			myprintf("Time:, %d s, V:, %d C\n\r", dataTimePassed, dataTemperature);
+			myprintf("Time:, %d s, Temp:, %d C\n\r", dataTimePassed, dataTemperature);
 		}
 	}
 	myprintf("Data Transfer Completed.\n\r");
@@ -328,7 +328,6 @@ int main(void)
 	HAL_RTC_GetTime(&hrtc, &gTime, RTC_FORMAT_BIN);
 	// Get current Address to write to //
 	Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
-	secondsPassed += colInt;
 	// Send time over serial for debugging
 	myprintf("Time Passed: %u Seconds\n\r", (unsigned int)secondsPassed);
 	// TEMPERATURE CODE //
@@ -344,6 +343,18 @@ int main(void)
 	 	//Read data from both temperature registers
 	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, 10);
 	 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, 10);
+
+	 	//If power loss, try reading temperature a second time with a delay
+	 	if ((fullTemp == 0) && (secondsPassed == 0))
+	 	{
+	 		HAL_Delay(50);
+
+		 	//Read data from both temperature registers
+		 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x06, 1, &tempL, 1, 10);
+		 	HAL_I2C_Mem_Read(&hi2c1, 0x79 | 0x01, 0x07, 1, &tempH, 1, 10);
+
+		 	fullTemp =((uint16_t)tempH << 8) | tempL;
+	 	}
 
 	 	//Concatenate and Print temperature data
 	 	fullTemp =((uint16_t)tempH << 8) | tempL;
@@ -468,6 +479,7 @@ int main(void)
 	MX_I2C1_Init();
 	MX_LPUART1_UART_Init();
 	HAL_ResumeTick();
+	secondsPassed += colInt;
 	/** Deactivate the RTC wakeup, we would do this when connected to PC**/
 	//HAL_RTCEx_DeactivateWakeUpTimer(&hrtc);
 	/*for (int j=0; j<6; j++)
