@@ -158,7 +158,7 @@ void Transfer_All_Data()
 	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 	readSamplesStored = Rx_Data[1];
 	readSamplesStored = (readSamplesStored == 0xffffffff) ? 0 : readSamplesStored;
-	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", readSamplesStored * 4);
+	myprintf("#Transmitting all Voltage Data (%u Samples):\n\r", readSamplesStored * 4);
 	if ((readSamplesStored == 0) || readSamplesStored == 0xffffffff)
 		myprintf("No stored data samples to transfer!\n\r");
 	else
@@ -173,7 +173,7 @@ void Transfer_All_Data()
 			// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
 			if ((i % 4) == 0)
 				currentAddress += 4;
-			myprintf("Time: %d s, Temp: %d C\n\r", dataTimePassed, dataTemperature);
+			myprintf("Time:, %d s, V:, %d C\n\r", dataTimePassed, dataTemperature);
 		}
 	}
 	myprintf("Data Transfer Completed.\n\r");
@@ -322,7 +322,14 @@ int main(void)
 	if (storeCounter >= 3){
 		storeCounter=0;
 	}else{storeCounter++;}
-	//storeCounter=3;
+	// check PGOOD
+	if(HAL_GPIO_ReadPin (GPIOB, GPIO_PIN_5)){
+		colInt = 5;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
+	}else{
+		colInt = 30;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
+	}
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
 	/* Get the RTC current Time */
@@ -586,7 +593,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 1843200;
+  hlpuart1.Init.BaudRate = 115200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
@@ -687,19 +694,12 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
 
-  /*Configure GPIO pin : PB4 */
-  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  /*Configure GPIO pins : PB4 PB5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_4|GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PH3 */
-  GPIO_InitStruct.Pin = GPIO_PIN_3;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOH, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */

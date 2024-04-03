@@ -156,7 +156,7 @@ void Transfer_All_Data()
 	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 	readSamplesStored = Rx_Data[1];
 	readSamplesStored = (readSamplesStored == 0xffffffff) ? 0 : readSamplesStored;
-	myprintf("#Transmitting all Temperature Data (%u Samples):\n\r", readSamplesStored * 4);
+	myprintf("#Transmitting all Voltage Data (%u Samples):\n\r", readSamplesStored * 4);
 	if ((readSamplesStored == 0) || readSamplesStored == 0xffffffff)
 		myprintf("No stored data samples to transfer!\n\r");
 	else
@@ -171,7 +171,7 @@ void Transfer_All_Data()
 			// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
 			if ((i % 4) == 0)
 				currentAddress += 4;
-			myprintf("Time: %d s, Temp: %d C\n\r", dataTimePassed, dataTemperature);
+			myprintf("Time: %d s, V: %d C\n\r", dataTimePassed, dataTemperature);
 		}
 	}
 	myprintf("Data Transfer Completed.\n\r");
@@ -184,6 +184,7 @@ void Transfer_All_Data()
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
@@ -422,13 +423,11 @@ int main(void)
 	HAL_PWR_DisableSleepOnExit();
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	// Disable peripherals before entering stop mode
-	HAL_UART_DeInit(&hlpuart1);
 		/* Enter STOP mode */
 	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 	/* Wake from stop mode */
 	SystemClock_Config();
 	// Re-init peripherals after waking from stop mode
-	MX_LPUART1_UART_Init();
 	HAL_ResumeTick();
   }
   /* USER CODE END 3 */
@@ -458,10 +457,9 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE|RCC_OSCILLATORTYPE_LSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.LSEState = RCC_LSE_ON;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -472,7 +470,7 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV4;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV2;
@@ -558,7 +556,7 @@ static void MX_LPUART1_UART_Init(void)
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
   hlpuart1.Init.BaudRate = 115200;
-  hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
+  hlpuart1.Init.WordLength = UART_WORDLENGTH_7B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
   hlpuart1.Init.Mode = UART_MODE_TX_RX;
