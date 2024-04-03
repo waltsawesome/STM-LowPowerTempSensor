@@ -55,7 +55,7 @@ RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
 uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
-uint8_t storeCounter=3, colInt = 5; //store intermediate values in backup reg for more efficiency
+uint8_t storeCounter=3, colInt = 30; //store intermediate values in backup reg for more efficiency
 uint16_t fullTemp; // Full temperature data
 uint64_t writeVal; // Value to write to flash storage
 uint32_t bkWrite, bkWriteTime; // Value to write to backup register
@@ -234,7 +234,7 @@ int main(void)
        Wake-up Time Base = 16 /(32KHz) = 0.0005 seconds
        ==> WakeUpCounter = ~5s/0.0005s = 10000 = 0x2710
      */
-  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
+  if ((HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS)) != HAL_OK)
   {
 	  Error_Handler();
   }
@@ -329,7 +329,7 @@ int main(void)
 	// Get current Address to write to //
 	Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
 	// Send time over serial for debugging
-	myprintf("Time Passed: %u Seconds\n\r", (unsigned int)secondsPassed);
+	myprintf("Time Passed (Since Power Loss): %u Seconds\n\r", (unsigned int)secondsPassed);
 	// TEMPERATURE CODE //
 	HAL_I2C_Mem_Write(&hi2c1, 0x79, 0x04, 1, &config, 1, 10);
 	writeVal = 0;
@@ -456,11 +456,11 @@ int main(void)
 	}
 	// check PGOOD
 	if(HAL_GPIO_ReadPin (GPIOB, GPIO_PIN_5)){
-		colInt = 5;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
-	}else{
 		colInt = 30;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt * 2000, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+	}else{
+		colInt = 120;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
 	}
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
