@@ -35,8 +35,8 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define FLASH_USER_START_ADDR   ADDR_FLASH_PAGE_16   /* Start @ of user Flash area */
-#define FLASH_USER_END_ADDR     ADDR_FLASH_PAGE_127 + FLASH_PAGE_SIZE - 1   /* End @ of user Flash area */
-#define FLASH_USER_ADDR_ADDR    ADDR_FLASH_PAGE_127
+#define FLASH_USER_END_ADDR     ADDR_FLASH_PAGE_18 + FLASH_PAGE_SIZE - 1   /* End @ of user Flash area */
+#define FLASH_USER_ADDR_ADDR    ADDR_FLASH_PAGE_18
 #define DATA_64                 ((uint64_t)0x1234567812345678)
 #define DATA_32                 ((uint32_t)0x12345678)
 /* USER CODE END PD */
@@ -55,7 +55,7 @@ RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
 uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
-uint8_t storeCounter=3, colInt = 30; //store intermediate values in backup reg for more efficiency
+uint8_t storeCounter=3, colInt = 1; //store intermediate values in backup reg for more efficiency
 uint16_t fullTemp; // Full temperature data
 uint64_t writeVal; // Value to write to flash storage
 uint32_t bkWrite, bkWriteTime; // Value to write to backup register
@@ -322,6 +322,7 @@ int main(void)
 	if (storeCounter >= 3){
 		storeCounter=0;
 	}else{storeCounter++;}
+	storeCounter=3;
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
 	/* Get the RTC current Time */
@@ -360,6 +361,7 @@ int main(void)
 	 	fullTemp =((uint16_t)tempH << 8) | tempL;
 	 	myprintf("temperature = %d \n\r", fullTemp/100);
 	}
+	fullTemp = 0xAAAA;
  	bkWrite = ((uint32_t)(uint8_t)((fullTemp >> 5) & 0xFF) << storeCounter*8);
  	bkWrite = (bkWrite | HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2));
  	bkWriteTime = (uint32_t)colInt<<storeCounter*8;

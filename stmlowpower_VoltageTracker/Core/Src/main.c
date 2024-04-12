@@ -54,7 +54,7 @@ UART_HandleTypeDef hlpuart1;
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
-uint8_t storeCounter=0, colInt = 4; //store intermediate values in backup reg for more efficiency
+uint8_t storeCounter=0, colInt = 60; //store intermediate values in backup reg for more efficiency
 uint16_t ADC_Result; // Full temperature data
 float Vin;
 uint64_t writeVal, bkWrite; // Value to write to flash storage
@@ -151,11 +151,11 @@ void Transfer_All_Data()
 	uint32_t currentAddress = FLASH_USER_START_ADDR;
 	uint32_t dataTimeInterval;
 	uint32_t dataTimePassed = 0;
-	uint32_t dataTemperatureHex;
-	uint32_t dataTemperature;
+	uint32_t dataVoltageHex;
 	Flash_Read_Data(mgmtAddr-8, Rx_Data, 1);
 	readSamplesStored = Rx_Data[1];
 	readSamplesStored = (readSamplesStored == 0xffffffff) ? 0 : readSamplesStored;
+	readSamplesStored = 3206;
 	myprintf("#Transmitting all Voltage Data (%u Samples):\n\r", readSamplesStored * 4);
 	if ((readSamplesStored == 0) || readSamplesStored == 0xffffffff)
 		myprintf("No stored data samples to transfer!\n\r");
@@ -163,15 +163,12 @@ void Transfer_All_Data()
 	{
 		for (uint32_t i = 1; i <= readSamplesStored * 4; i++)
 		{
-			dataTimeInterval = *(__IO uint32_t *)currentAddress & 0xff;
-			dataTimePassed += dataTimeInterval;
-			dataTemperatureHex = *(__IO uint32_t *)(currentAddress+4) & 0xff;
-			dataTemperature = (dataTemperatureHex * 32) / 100;
-			currentAddress += 1;
+			dataTimeInterval = 1;
+			dataVoltageHex = *(__IO uint32_t *)(currentAddress) & 0xffff;
+			currentAddress += 2;
 			// Above code reads from 2 concurrent 32-bit words. So once end of byte reached, skip 1 word.
-			if ((i % 4) == 0)
-				currentAddress += 4;
-			myprintf("Time: %d s, V: %d C\n\r", dataTimePassed, dataTemperature);
+			dataTimePassed += dataTimeInterval;
+			myprintf("Time:, %d s, V:, %04"PRIx16" V\n\r", dataTimePassed, dataVoltageHex);
 		}
 	}
 	myprintf("Data Transfer Completed.\n\r");
@@ -212,7 +209,7 @@ int main(void)
   MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   // Optional Flasher
-  /*
+
   HAL_Delay(1000);
   for (int i=0; i<11; i++)
   {
@@ -220,7 +217,7 @@ int main(void)
 	  HAL_Delay(200);
   }
   HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
-  */
+
   myprintf("BEGIN MAIN\n\n\r");
    /* enable the RTC Wakeup */
      /*  RTC Wake-up Interrupt Generation:
@@ -239,6 +236,7 @@ int main(void)
   //Scan Flash for free page, assume if start of page is empty, the page is empty
   // 2048 should be page size in bytes, 1 address = 1 byte
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_DIFFERENTIAL_ENDED);
+
   if (Address == 0x00000000){
 	  Address = FLASH_USER_START_ADDR;
 	  while (mgmtAddr < FLASH_USER_END_ADDR && Rx_Data[0] != 0xFFFFFFFF){
@@ -423,11 +421,13 @@ int main(void)
 	HAL_PWR_DisableSleepOnExit();
 	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3);
 	// Disable peripherals before entering stop mode
+	HAL_UART_DeInit(&hlpuart1);
 		/* Enter STOP mode */
 	HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
 	/* Wake from stop mode */
 	SystemClock_Config();
 	// Re-init peripherals after waking from stop mode
+	MX_LPUART1_UART_Init();
 	HAL_ResumeTick();
   }
   /* USER CODE END 3 */
@@ -556,7 +556,7 @@ static void MX_LPUART1_UART_Init(void)
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
   hlpuart1.Init.BaudRate = 115200;
-  hlpuart1.Init.WordLength = UART_WORDLENGTH_7B;
+  hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
   hlpuart1.Init.Mode = UART_MODE_TX_RX;
