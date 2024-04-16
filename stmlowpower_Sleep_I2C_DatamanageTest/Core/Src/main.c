@@ -55,7 +55,7 @@ RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
 uint8_t  tempH, tempL; //Temperature data is read in 2 8-bit parts
-uint8_t storeCounter=3, colInt = 1; //store intermediate values in backup reg for more efficiency
+uint8_t storeCounter=3, colInt = 5; //store intermediate values in backup reg for more efficiency
 uint16_t fullTemp; // Full temperature data
 uint64_t writeVal; // Value to write to flash storage
 uint32_t bkWrite, bkWriteTime; // Value to write to backup register
@@ -234,7 +234,7 @@ int main(void)
        Wake-up Time Base = 16 /(32KHz) = 0.0005 seconds
        ==> WakeUpCounter = ~5s/0.0005s = 10000 = 0x2710
      */
-  if ((HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS)) != HAL_OK)
+  if (HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0x7D0, RTC_WAKEUPCLOCK_RTCCLK_DIV16) != HAL_OK)
   {
 	  Error_Handler();
   }
@@ -310,6 +310,7 @@ int main(void)
   HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR1, Address);
   //HAL_RTCEx_BKUPWrite(&hrtc, RTC_BKP_DR0, '*'); //Write to RTC backup register
   HAL_FLASH_Lock();
+  Address = 0x08008F00;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -458,11 +459,11 @@ int main(void)
 	}
 	// check PGOOD
 	if(HAL_GPIO_ReadPin (GPIOB, GPIO_PIN_5)){
-		colInt = 30;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+		colInt = 1;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0x7D0, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
 	}else{
-		colInt = 120;
-		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, colInt, RTC_WAKEUPCLOCK_CK_SPRE_16BITS);
+		colInt = 1;
+		HAL_RTCEx_SetWakeUpTimer_IT(&hrtc, 0x7D0, RTC_WAKEUPCLOCK_RTCCLK_DIV16);
 	}
 	/* Suspend tick before entering stop mode */
 	HAL_SuspendTick();
@@ -510,18 +511,13 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Configure LSE Drive Capability
-  */
-  HAL_PWR_EnableBkUpAccess();
-  __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
-
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE;
-  RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -607,7 +603,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 1843200;
+  hlpuart1.Init.BaudRate = 115200;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
