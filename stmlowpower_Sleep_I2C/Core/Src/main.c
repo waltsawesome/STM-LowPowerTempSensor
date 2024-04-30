@@ -13,6 +13,8 @@
   * in the root directory of this software component.
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
+  * Code developed by Walter Schutz and Christopher Fehrer
+  * 2023-2024 ECD 403 Senior project
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -317,15 +319,12 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
 	if (storeCounter >= 3){
 		storeCounter=0;
 	}else{storeCounter++;}
-	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_3); // Toggle LED on (does nothing)
 	static uint32_t secondsPassed = 0; // keep track of time, assume RTC value is exact
-	/* Get the RTC current Time */
-	HAL_RTC_GetTime(&hrtc, &gTime, RTC_FORMAT_BIN);
 	// Get current Address to write to //
 	Address = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR1);
 	// Send time over serial for debugging
