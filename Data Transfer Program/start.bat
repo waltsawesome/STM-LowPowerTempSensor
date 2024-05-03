@@ -1,3 +1,8 @@
+******************************************************************************
+* Code developed by Walter Schutz and Christopher Fehrer
+* 2023-2024 ECD 403 Senior project
+******************************************************************************
+
 @echo off
 setlocal enabledelayedexpansion 
 :: Clear old logs from previous runs
