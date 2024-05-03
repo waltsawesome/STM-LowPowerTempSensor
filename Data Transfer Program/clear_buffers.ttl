@@ -1,3 +1,8 @@
+;******************************************************************************
+;* Code developed by Walter Schutz and Christopher Fehrer
+;* 2023-2024 ECD 403 Senior project
+;******************************************************************************
+
 flushrecv
 clearscreen 0
 closett
